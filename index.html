@@ -31,38 +31,118 @@
     <div id="preloadContainer" class="fill-viewport"><div style="z-index: 4; position: absolute; overflow: hidden; left: 0%; top: 50%; width: 100.00%; height: 10.00%" ><div style="text-align:left; color:#000; "><DIV STYLE="text-align:center;font-size:1.6666666666666663vmin;"><SPAN STYLE="display:inline-block; letter-spacing:0vmin; white-space:pre-wrap;color:#777777;font-size:1.67vmin;font-family:Arial, Helvetica, sans-serif;">Loading virtual tour. Please wait...</SPAN></DIV></div></div></div>
     <div id="viewer" class="fill-viewport"></div>
 <script>
-console.log("%c=== INICIANDO ESCANEO DE ALTA PRECISIÓN ===", "color: #00ffff; font-weight: bold; font-size: 14px;");
+console.log("%c=== INICIANDO CONECTOR DE INVENTARIO DEFINITIVO ===", "color: #00ff00; font-weight: bold; font-size: 14px;");
 
-function escudriñarMemoria(objeto, rutaActual = "window", visitados = new Set()) {
-    if (!objeto || visitados.has(objeto) || typeof objeto !== "object") return;
-    visitados.add(objeto);
+const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
+
+// Función auxiliar para normalizar colores (acepta nombres o códigos HEX)
+function obtenerColorHex(estadoOhex) {
+    let valor = estadoOhex.trim().toLowerCase().replace("#", "");
     
-    for (let propiedad in objeto) {
-        try {
-            let valor = objeto[propiedad];
-            let nuevaRuta = Array.isArray(objeto) ? `${rutaActual}[${propiedad}]` : `${rutaActual}.${propiedad}`;
-            
-            // Si encontramos el ID de tu lote, el sistema nos dirá dónde está metido
-            if (valor === "lote_01") {
-                console.log(`%c🎯 ¡ENCONTRADO! 'lote_01' existe en: ${nuevaRuta}`, "color: #00ff00; font-weight: bold; font-size: 13px;");
-                console.log("📦 Objeto contenedor completo para análisis de color:", objeto);
-            }
-            
-            if (typeof valor === "object" && valor !== null) {
-                escudriñarMemoria(valor, nuevaRuta, visitados);
-            }
-        } catch (e) {
-            // Ignorar errores de seguridad del navegador
-        }
+    // Si ya es un código hexadecimal válido de 6 caracteres
+    if (valor.length === 6 && /^[0-9a-f]{6}$/i.test(valor)) {
+        return "#" + valor;
     }
+    
+    // Mapeo por palabras comunes en el Sheets
+    if (valor.includes("vend") || valor.includes("roj")) return "#FF0000"; // Rojo
+    if (valor.includes("disp") || valor.includes("verd")) return "#00FF00"; // Verde
+    if (valor.includes("azul")) return "#0000FF"; // Azul
+    if (valor.includes("morad")) return "#800080"; // Morado
+    
+    return "#00FF00"; // Color por defecto (Verde Disponible)
 }
 
-// Esperamos 6 segundos a que el recorrido virtual de 3DVista se monte por completo en pantalla
-setTimeout(() => {
-    console.log("🔎 Buscando la ubicación secreta de tus lotes en la memoria de 3DVista v2024...");
-    escudriñarMemoria(window);
-    console.log("🏁 Escaneo profundo terminado.");
-}, 6000);
+function inicializarControlInventario() {
+    fetch(URL_GOOGLE_SHEETS)
+    .then(response => response.text())
+    .then(csvText => {
+        let filas = csvText.split("\n");
+        let mapeo_lotes = {};
+        
+        filas.forEach(fila => {
+            let columnas = fila.split(",");
+            if(columnas.length >= 2) {
+                let nombreExcel = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
+                let estadoExcel = columnas[1].trim();
+                if (nombreExcel) {
+                    mapeo_lotes[nombreExcel] = estadoExcel;
+                }
+            }
+        });
+
+        // Bucle de inyección en caliente sobre la memoria viva detectada por el escáner
+        let intentos = 0;
+        let verificador3DVista = setInterval(() => {
+            intentos++;
+            
+            try {
+                // Acceso seguro al núcleo de datos dinámicos mapeado en tu captura
+                if (window.TDV && window.TDV.qb && window.TDV.qb.F6a && window.TDV.qb.F6a[0]) {
+                    let core = window.TDV.qb.F6a[0];
+                    if (core.wv && core.wv.Xl && core.wv.Xl.rd && core.wv.Xl.rd.attributes) {
+                        let items = core.wv.Xl.rd.attributes.definitions.items;
+                        
+                        if (items && items.length > 0) {
+                            let seCambioColor = false;
+                            
+                            // Recorremos todos los elementos del Canvas de 3DVista
+                            items.forEach(item => {
+                                if (item.attributes && item.attributes.data && item.attributes.data.value) {
+                                    let listaItems = item.attributes.data.value.tags && item.attributes.data.value.tags.items ? item.attributes.data.value.tags.items : [];
+                                    
+                                    listaItems.forEach(tagObj => {
+                                        if (tagObj.value) {
+                                            let nombreHotspot = tagObj.value.toString().toLowerCase().replace(/[\s_-]/g, "");
+                                            
+                                            // Si coincide con un lote del Excel
+                                            if (mapeo_lotes[nombreHotspot]) {
+                                                let colorFinal = obtenerColorHex(mapeo_lotes[nombreHotspot]);
+                                                
+                                                // Forzamos el color en el atributo de definición nativo
+                                                if (item.attributes.value && item.attributes.value.label) {
+                                                    item.attributes.value.label.value = colorFinal;
+                                                }
+                                                
+                                                // Modificación de propiedades de renderizado en caliente
+                                                if (item.attributes.fillColor) item.attributes.fillColor.value = colorFinal;
+                                                if (item.attributes.lineColor) item.attributes.lineColor.value = colorFinal;
+                                                
+                                                seCambioColor = true;
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                            
+                            // Si logramos inyectar los colores, obligamos al reproductor a re-dibujar el lienzo
+                            if (seCambioColor) {
+                                console.log("🟢 ¡Éxito! Colores del mapa sincronizados con Google Sheets.");
+                                if (window.pano && typeof window.pano.getCurrentPanoramaName === "function" && typeof window.pano.setPanorama === "function") {
+                                    let escenaActual = window.pano.getCurrentPanoramaName();
+                                    window.pano.setPanorama(escenaActual); // Refresca el Canvas visualmente
+                                }
+                                clearInterval(verificador3DVista);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.log("🔄 Esperando carga completa de componentes gráficos...");
+            }
+            
+            if (intentos > 40) clearInterval(verificador3DVista);
+        }, 500);
+
+    })
+    .catch(error => console.error('Error al descargar inventario:', error));
+}
+
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    inicializarControlInventario();
+} else {
+    window.addEventListener("DOMContentLoaded", inicializarControlInventario);
+}
 </script>
 </body>
 </html>
