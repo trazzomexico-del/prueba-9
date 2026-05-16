@@ -1,136 +1,46 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <title>Sin Título 4</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta name="viewport" id="metaViewport" content="user-scalable=no, initial-scale=1, width=device-width, viewport-fit=cover" data-tdv-general-scale="0.5"/>
-    <meta name="apple-mobile-web-app-capable" content="yes"/>
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <script src="lib/tdvplayer.js?v=1778937153695"></script>
-    <link rel="preload" href="locale/es.txt?v=1778937153695" as="fetch" crossorigin="anonymous"/>
-	<link rel="preload" href="script.js?v=1778937153695" as="script"/>
-	<link rel="preload" href="media/panorama_0F1F8CEF_1EB1_A66A_41A5_71F94F88735E_0/l/3/0_0.webp?v=1778937153695" as="image"/>
-	<link rel="preload" href="media/panorama_0F1F8CEF_1EB1_A66A_41A5_71F94F88735E_0/r/3/0_0.webp?v=1778937153695" as="image"/>
-	<link rel="preload" href="media/panorama_0F1F8CEF_1EB1_A66A_41A5_71F94F88735E_0/d/3/0_0.webp?v=1778937153695" as="image"/>
-	<link rel="preload" href="media/panorama_0F1F8CEF_1EB1_A66A_41A5_71F94F88735E_0/f/3/0_0.webp?v=1778937153695" as="image"/>
-	<link rel="preload" href="media/panorama_0F1F8CEF_1EB1_A66A_41A5_71F94F88735E_0/b/3/0_0.webp?v=1778937153695" as="image"/>
-	<meta name="description" content="Virtual Tour"/>
-	<meta name="theme-color" content="#FFFFFF"/>
-    <script src="script.js?v=1778937153695"></script>
-    <style type="text/css">
-        html, body { height:100%; width:100%; height:100vh; width:100vw; margin:0; padding:0; overflow:hidden; }
-        .fill-viewport { position:fixed; top:0; left:0; right:0; bottom:0; padding:0; margin:0; overflow: hidden; }
-        .fill-viewport.landscape-left { left: env(safe-area-inset-left); }
-		.fill-viewport.landscape-right { right: env(safe-area-inset-right); }
-        #viewer { z-index:1; }
-        #preloadContainer { z-index:2; opacity:0; background-color:rgba(255,255,255,1); transition: opacity 0.5s; -webkit-transition: opacity 0.5s; -moz-transition: opacity 0.5s; -o-transition: opacity 0.5s;}
-    </style>
-    <link rel="stylesheet" href="fonts.css?v=1778937153695">
-</head>
-<body>
-    <div id="preloadContainer" class="fill-viewport"><div style="z-index: 4; position: absolute; overflow: hidden; left: 0%; top: 50%; width: 100.00%; height: 10.00%" ><div style="text-align:left; color:#000; "><DIV STYLE="text-align:center;font-size:1.6666666666666663vmin;"><SPAN STYLE="display:inline-block; letter-spacing:0vmin; white-space:pre-wrap;color:#777777;font-size:1.67vmin;font-family:Arial, Helvetica, sans-serif;">Loading virtual tour. Please wait...</SPAN></DIV></div></div></div>
-    <div id="viewer" class="fill-viewport"></div>
 <script>
-// 1. ENLACE CORRECTO FORZADO A CSV EN LUGAR DE LA INTERFAZ DE EDICIÓN
+console.log("%c=== INICIANDO ESPIONAJE TÉCNICO TRACCO ===", "color: #00ff00; font-weight: bold; font-size: 14px;");
+
 const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
 
-function inicializarControlInventario() {
-    console.log("=== INICIANDO CONTROL DE INVENTARIO TRACCO ===");
+// 1. Verificar si el Excel responde bien
+fetch(URL_GOOGLE_SHEETS)
+.then(r => r.text())
+.then(data => {
+    console.log("🟢 1. EXCEL CONECTADO. Filas detectadas:", data.split("\n").length);
+})
+.catch(e => console.error("🔴 ERROR CONEXIÓN EXCEL:", e));
+
+// 2. Rastrear objetos de 3DVista en memoria
+let checadorSistemas = setInterval(() => {
+    console.log("🔍 Buscando contenedores de 3DVista...");
     
-    fetch(URL_GOOGLE_SHEETS)
-    .then(response => response.text())
-    .then(csvText => {
-        let filas = csvText.split("\n");
-        let mapeo_lotes = {};
-        
-        // Procesamos el CSV de Google Sheets
-        filas.forEach(fila => {
-            let columnas = fila.split(",");
-            if(columnas.length >= 2) {
-                let nombreExcel = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
-                let estadoExcel = columnas[1].trim().toLowerCase();
-                if (nombreExcel) {
-                    mapeo_lotes[nombreExcel] = estadoExcel;
-                }
+    if (window.tdvData) {
+        console.log("🟢 2. DETECTADO window.tdvData");
+        if (window.tdvData.panoramas && window.tdvData.panoramas[0]) {
+            let primerPano = window.tdvData.panoramas[0];
+            console.log("📦 Datos del primer Panorama:", primerPano);
+            if (primerPano.hotspots) {
+                console.log("🔥 ¡Hotspots encontrados en tdvData! Cantidad:", primerPano.hotspots.length);
+                console.log("📐 Estructura real del primer Hotspot:", JSON.stringify(primerPano.hotspots[0]));
+            } else {
+                console.log("⚠️ El panorama no reporta hotspots en tdvData.");
             }
-        });
-        console.log("Lotes cargados desde Excel:", mapeo_lotes);
+        }
+    } else {
+        console.log("❌ window.tdvData aún no existe en el mapa global.");
+    }
 
-        // ========================================================
-        // INTERCEPTOR DE MEMORIA VIVA DE 3DVISTA
-        // ========================================================
-        let intentos = 0;
-        let verificadorVivo = setInterval(() => {
-            intentos++;
-            
-            // Buscamos el reproductor activo en la ventana
-            if (window.pano && typeof window.pano.getPanoramas === "function") {
-                let panos = window.pano.getPanoramas();
-                if (panos && panos.length > 0) {
-                    let seModificoAlgo = false;
+    if (window.pano) {
+        console.log("🟢 3. DETECTADO window.pano (Visor en vivo)");
+        if (typeof window.pano.getPanoramas === "function") {
+            let p = window.pano.getPanoramas();
+            console.log("📱 Panoramas en vivo activos:", p);
+        }
+        clearInterval(checadorSistemas); // Paramos al encontrar el visor
+    }
+}, 1000);
 
-                    panos.forEach(p => {
-                        let hotspots = typeof p.getHotspots === "function" ? p.getHotspots() : (p.hotspots || []);
-                        if (hotspots && hotspots.length > 0) {
-                            hotspots.forEach(hotspot => {
-                                // Obtenemos el nombre asignado en el editor de 3DVista
-                                let nombre = hotspot.name || (hotspot.get ? hotspot.get("name") : "") || hotspot.id || "";
-                                let nombreLimpio = nombre.toString().toLowerCase().replace(/[\s_-]/g, "");
-                                
-                                if (mapeo_lotes[nombreLimpio]) {
-                                    let estado = mapeo_lotes[nombreLimpio];
-                                    
-                                    // Asignación de colores según estado del Excel
-                                    let color = "#00FF00"; // Verde por defecto (Disponible)
-                                    if (estado.includes("vend") || estado.includes("roj")) {
-                                        color = "#FF0000"; // Rojo (Vendido)
-                                    } else if (estado.includes("verd")) {
-                                        color = "#00FF00"; // Verde explícito
-                                    }
-                                    
-                                    // Forzamos el color en el motor gráfico de 3DVista
-                                    hotspot.fillColor = color;
-                                    hotspot.lineColor = color;
-                                    hotspot.fillOpacity = 0.5;
-                                    if (hotspot.set) {
-                                        hotspot.set("fillColor", color);
-                                        hotspot.set("lineColor", color);
-                                    }
-                                    seModificoAlgo = true;
-                                }
-                            });
-                        }
-                    });
-
-                    // Si logramos alterar los colores del Canvas, refrescamos la escena actual
-                    if (seModificoAlgo) {
-                        console.log("¡Éxito! Colores de lotes actualizados dinámicamente.");
-                        if (typeof window.pano.getCurrentPanoramaName === "function" && typeof window.pano.setPanorama === "function") {
-                            let escenaActual = window.pano.getCurrentPanoramaName();
-                            window.pano.setPanorama(escenaActual);
-                        }
-                        clearInterval(verificadorVivo); // Detenemos el ciclo de búsqueda
-                    }
-                }
-            }
-
-            // Si pasa mucho tiempo y el tour no carga, detenemos el script para no gastar memoria
-            if (intentos > 40) {
-                console.log("Búsqueda finalizada. No se detectó un reproductor activo compatible.");
-                clearInterval(verificadorVivo);
-            }
-        }, 400);
-
-    })
-    .catch(error => console.error('Error de conexión con Sheets:', error));
-}
-
-// Inicialización segura del script
-if (document.readyState === "complete" || document.readyState === "interactive") {
-    inicializarControlInventario();
-} else {
-    window.addEventListener("DOMContentLoaded", inicializarControlInventario);
-}
+// Detener el ciclo si pasa mucho tiempo
+setTimeout(() => clearInterval(checadorSistemas), 10000);
 </script>
-</body>
-</html>
