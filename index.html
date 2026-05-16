@@ -31,119 +31,109 @@
     <div id="preloadContainer" class="fill-viewport"><div style="z-index: 4; position: absolute; overflow: hidden; left: 0%; top: 50%; width: 100.00%; height: 10.00%" ><div style="text-align:left; color:#000; "><DIV STYLE="text-align:center;font-size:1.6666666666666663vmin;"><SPAN STYLE="display:inline-block; letter-spacing:0vmin; white-space:pre-wrap;color:#777777;font-size:1.67vmin;font-family:Arial, Helvetica, sans-serif;">Loading virtual tour. Please wait...</SPAN></DIV></div></div></div>
     <div id="viewer" class="fill-viewport"></div>
 <script>
-console.log("%c=== MOTOR DE INVENTARIO INMERSIA 360 ACTIVADO ===", "color: #00ffff; font-weight: bold; font-size: 14px;");
+console.log("%c=== INTERCEPTOR ESTRUCTURAL INMERSIA 360 ACTIVADO ===", "color: #00ffcc; font-weight: bold; font-size: 14px;");
 
 const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
 
-// Convierte texto del Excel a formato Hexadecimal nativo de Canvas
-function procesarColorExcel(valorCelda) {
-    let valor = valorCelda.trim().toLowerCase().replace("#", "");
+// Convierte texto del Excel a formato Hexadecimal legible por el Canvas
+function traducirColorExcel(estadoOhex) {
+    let valor = estadoOhex.trim().toLowerCase().replace("#", "");
     
-    // Si ya pusiste un código HEX válido (ej. FF0000 o 00FF00)
+    // Si ya pusiste un código HEX de 6 caracteres válido en el Sheets
     if (valor.length === 6 && /^[0-9a-f]{6}$/i.test(valor)) {
         return "#" + valor;
     }
     
-    // Diccionario inteligente por palabras en español
-    if (valor.includes("vend") || valor.includes("roj")) return "#FF0000";     // Rojo
-    if (valor.includes("disp") || valor.includes("verd")) return "#00FF00";    // Verde (00FF00)
-    if (valor.includes("azul")) return "#0000FF";                             // Azul
-    if (valor.includes("morad") || valor.includes("800080")) return "#800080"; // Morado
+    // Filtro inteligente por palabras comunes
+    if (valor.includes("vend") || valor.includes("roj")) return "#FF0000"; // Rojo
+    if (valor.includes("disp") || valor.includes("verd")) return "#00FF00"; // Verde
+    if (valor.includes("azul")) return "#0000FF"; // Azul
+    if (valor.includes("morad")) return "#800080"; // Morado
     
-    return "#00FF00"; // Color base si no coincide ninguno
+    return "#00FF00"; // Por defecto disponible
 }
 
-function sincronizarInventarioRealtime() {
+// SECUESTRO LEGÍTIMO DEL CONSTRUCTOR DE CORES DE 3DVISTA
+// Interceptamos la creación del objeto "Tour" justo antes de que dibuje el Canvas
+const originalTourConstructor = TDV.Tour;
+
+TDV.Tour = function(settings, devicesUrl) {
+    console.log("🎯 Capturando ajustes nativos del Tour antes de renderizar...");
+    
+    // Almacenamos temporalmente la instancia para usarla de forma normal
+    const self = this;
+    
+    // Descargamos los datos en tiempo real de tu Google Sheets de forma síncrona/prioritaria
     fetch(URL_GOOGLE_SHEETS)
     .then(response => response.text())
     .then(csvText => {
         let filas = csvText.split("\n");
         let mapeo_lotes = {};
         
-        // Estructuramos los datos del Google Sheet
         filas.forEach(fila => {
             let columnas = fila.split(",");
             if(columnas.length >= 2) {
-                let nombreLote = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
-                let estadoColor = columnas[1].trim();
-                if (nombreLote) {
-                    mapeo_lotes[nombreLote] = estadoColor;
-                }
+                let idLote = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
+                let colorEstado = columnas[1].trim();
+                if (idLote) mapeo_lotes[idLote] = traducirColorExcel(colorEstado);
             }
         });
+        
+        console.log("📊 Datos de disponibilidad procesados:", mapeo_lotes);
 
-        // Bucle de escaneo e inyección en la memoria profunda descubierta
-        let intentos = 0;
-        let bucleInyeccion = setInterval(() => {
-            intentos++;
-            
-            try {
-                if (window.TDV && window.TDV.qb && window.TDV.qb.F6a && window.TDV.qb.F6a[0]) {
-                    let core = window.TDV.qb.F6a[0];
-                    let items = core.wv.Xl.rd.attributes.definitions.items;
-                    
-                    if (items && items.length > 0) {
-                        let cambiosRealizados = false;
-                        
-                        items.forEach(item => {
-                            if (item.attributes && item.attributes.data && item.attributes.data.value) {
-                                let tagsItems = item.attributes.data.value.tags && item.attributes.data.value.tags.items ? item.attributes.data.value.tags.items : [];
-                                
-                                tagsItems.forEach(tagObj => {
-                                    if (tagObj.value) {
-                                        let idHotspot = tagObj.value.toString().toLowerCase().replace(/[\s_-]/g, "");
+        // Buscamos dentro de la gigantesca estructura de datos cargada en settings (data)
+        try {
+            if (settings && typeof settings.get === "function") {
+                let dataTour = settings.get("data") || {};
+                
+                // Inspeccionamos los overlays/hotspots que 3DVista tiene precargados en memoria de diseño
+                if (dataTour.media && Array.isArray(dataTour.media)) {
+                    dataTour.media.forEach(panorama => {
+                        if (panorama.overlays && Array.isArray(panorama.overlays)) {
+                            panorama.overlays.forEach(overlay => {
+                                // Buscamos si el hotspot tiene una etiqueta o ID que coincida con el Excel
+                                if (overlay.name) {
+                                    let idHotspot = overlay.name.toLowerCase().replace(/[\s_-]/g, "");
+                                    
+                                    if (mapeo_lotes[idHotspot]) {
+                                        let colorFinal = mapeo_lotes[idHotspot];
+                                        console.log(`🎨 Lote detectado en memoria: ${overlay.name} -> Aplicando color: ${colorFinal}`);
                                         
-                                        // Si el ID del plano coincide con la lista del Excel
-                                        if (mapeo_lotes[idHotspot]) {
-                                            let hexColor = procesarColorExcel(mapeo_lotes[idHotspot]);
-                                            
-                                            // 1. Modificar valores de definición base
-                                            if (item.attributes.value && item.attributes.value.label) {
-                                                item.attributes.value.label.value = hexColor;
-                                            }
-                                            // 2. Modificar canales dinámicos de relleno y línea del Canvas
-                                            if (item.attributes.fillColor) item.attributes.fillColor.value = hexColor;
-                                            if (item.attributes.lineColor) item.attributes.lineColor.value = hexColor;
-                                            
-                                            cambiosRealizados = true;
+                                        // Modificamos las propiedades nativas de color antes de que WebGL dibuje las capas
+                                        if (overlay.fillColor) overlay.fillColor = colorFinal;
+                                        if (overlay.lineColor) overlay.lineColor = colorFinal;
+                                        if (overlay.color) overlay.color = colorFinal;
+                                        
+                                        // Compatibilidad con estados expandidos v2024
+                                        if (overlay.states && Array.isArray(overlay.states)) {
+                                            overlay.states.forEach(state => {
+                                                if (state.fillColor) state.fillColor = colorFinal;
+                                                if (state.lineColor) state.lineColor = colorFinal;
+                                            });
                                         }
                                     }
-                                });
-                            }
-                        });
-                        
-                        // Si se cambiaron los colores en memoria, obligamos al Canvas a repintarse por completo
-                        if (cambiosRealizados) {
-                            console.log("🟢 ¡Colores inyectados en la memoria de 3DVista con éxito!");
-                            
-                            // TRUCO DE RENDERIZADO: Forzamos un evento 'resize' global.
-                            // Esto obliga al motor gráfico a recalcular el contenedor y volver a dibujar los polígonos con los nuevos colores en caliente.
-                            window.dispatchEvent(new Event('resize'));
-                            
-                            // Intento secundario de actualización interna de la interfaz
-                            if (core.wv && typeof core.wv.update === "function") core.wv.update();
-                            
-                            clearInterval(bucleInyeccion);
+                                }
+                            });
                         }
-                    }
+                    });
                 }
-            } catch (err) {
-                // Silencioso mientras terminan de cargar los elementos pesados del tour
             }
-            
-            if (intentos > 30) clearInterval(bucleInyeccion);
-        }, 1000);
+        } catch (e) {
+            console.error("⚠️ Error inyectando colores en la estructura interna:", e);
+        }
 
+        // Una vez alterados los colores originales por los del Excel, ejecutamos el motor original de 3DVista
+        originalTourConstructor.call(self, settings, devicesUrl);
     })
-    .catch(error => console.error('Error al consultar inventario desde Sheets:', error));
-}
+    .catch(err => {
+        console.error("🔴 Error al conectar con Google Sheets, iniciando tour con diseño original:", err);
+        originalTourConstructor.call(self, settings, devicesUrl);
+    });
+};
 
-// Inicialización segura del script
-if (document.readyState === "complete" || document.readyState === "interactive") {
-    setTimeout(sconizarInventarioRealtime, 2000);
-} else {
-    window.addEventListener("load", () => setTimeout(sconizarInventarioRealtime, 2000));
-}
+// Mantenemos los prototipos heredados intactos para que el reproductor no rompa sus funciones
+TDV.Tour.prototype = originalTourConstructor.prototype;
+Object.assign(TDV.Tour, originalTourConstructor);
 </script>
 </body>
 </html>
