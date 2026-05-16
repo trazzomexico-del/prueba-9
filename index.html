@@ -31,118 +31,44 @@
     <div id="preloadContainer" class="fill-viewport"><div style="z-index: 4; position: absolute; overflow: hidden; left: 0%; top: 50%; width: 100.00%; height: 10.00%" ><div style="text-align:left; color:#000; "><DIV STYLE="text-align:center;font-size:1.6666666666666663vmin;"><SPAN STYLE="display:inline-block; letter-spacing:0vmin; white-space:pre-wrap;color:#777777;font-size:1.67vmin;font-family:Arial, Helvetica, sans-serif;">Loading virtual tour. Please wait...</SPAN></DIV></div></div></div>
     <div id="viewer" class="fill-viewport"></div>
 <script>
-console.log("%c=== INICIANDO CONECTOR DE INVENTARIO DEFINITIVO ===", "color: #00ff00; font-weight: bold; font-size: 14px;");
+console.log("%c=== PROBANDO API OFICIAL DE RENDERIZADO ===", "color: #ffff00; font-weight: bold; font-size: 14px;");
 
 const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
 
-// Función auxiliar para normalizar colores (acepta nombres o códigos HEX)
-function obtenerColorHex(estadoOhex) {
-    let valor = estadoOhex.trim().toLowerCase().replace("#", "");
-    
-    // Si ya es un código hexadecimal válido de 6 caracteres
-    if (valor.length === 6 && /^[0-9a-f]{6}$/i.test(valor)) {
-        return "#" + valor;
-    }
-    
-    // Mapeo por palabras comunes en el Sheets
-    if (valor.includes("vend") || valor.includes("roj")) return "#FF0000"; // Rojo
-    if (valor.includes("disp") || valor.includes("verd")) return "#00FF00"; // Verde
-    if (valor.includes("azul")) return "#0000FF"; // Azul
-    if (valor.includes("morad")) return "#800080"; // Morado
-    
-    return "#00FF00"; // Color por defecto (Verde Disponible)
-}
+// Esperamos 6 segundos a que el mapa esté completamente activo en pantalla
+setTimeout(() => {
+    console.log("🚀 Verificando herramientas de control de 3DVista...");
 
-function inicializarControlInventario() {
-    fetch(URL_GOOGLE_SHEETS)
-    .then(response => response.text())
-    .then(csvText => {
-        let filas = csvText.split("\n");
-        let mapeo_lotes = {};
+    // 1. Verificar si el visor expone sus componentes de control
+    if (window.pano) {
+        console.log("🟢 Visor global 'window.pano' detectado.");
         
-        filas.forEach(fila => {
-            let columnas = fila.split(",");
-            if(columnas.length >= 2) {
-                let nombreExcel = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
-                let estadoExcel = columnas[1].trim();
-                if (nombreExcel) {
-                    mapeo_lotes[nombreExcel] = estadoExcel;
-                }
-            }
-        });
+        // Vamos a listar todas las funciones que tiene el visor para ver cuál nos sirve para actualizar elementos
+        let metodosDisponibles = Object.getOwnPropertyNames(window.pano).filter(item => typeof window.pano[item] === 'function');
+        console.log("📋 Funciones disponibles en tu reproductor para alterar el mapa:", metodosDisponibles);
 
-        // Bucle de inyección en caliente sobre la memoria viva detectada por el escáner
-        let intentos = 0;
-        let verificador3DVista = setInterval(() => {
-            intentos++;
-            
-            try {
-                // Acceso seguro al núcleo de datos dinámicos mapeado en tu captura
-                if (window.TDV && window.TDV.qb && window.TDV.qb.F6a && window.TDV.qb.F6a[0]) {
-                    let core = window.TDV.qb.F6a[0];
-                    if (core.wv && core.wv.Xl && core.wv.Xl.rd && core.wv.Xl.rd.attributes) {
-                        let items = core.wv.Xl.rd.attributes.definitions.items;
-                        
-                        if (items && items.length > 0) {
-                            let seCambioColor = false;
-                            
-                            // Recorremos todos los elementos del Canvas de 3DVista
-                            items.forEach(item => {
-                                if (item.attributes && item.attributes.data && item.attributes.data.value) {
-                                    let listaItems = item.attributes.data.value.tags && item.attributes.data.value.tags.items ? item.attributes.data.value.tags.items : [];
-                                    
-                                    listaItems.forEach(tagObj => {
-                                        if (tagObj.value) {
-                                            let nombreHotspot = tagObj.value.toString().toLowerCase().replace(/[\s_-]/g, "");
-                                            
-                                            // Si coincide con un lote del Excel
-                                            if (mapeo_lotes[nombreHotspot]) {
-                                                let colorFinal = obtenerColorHex(mapeo_lotes[nombreHotspot]);
-                                                
-                                                // Forzamos el color en el atributo de definición nativo
-                                                if (item.attributes.value && item.attributes.value.label) {
-                                                    item.attributes.value.label.value = colorFinal;
-                                                }
-                                                
-                                                // Modificación de propiedades de renderizado en caliente
-                                                if (item.attributes.fillColor) item.attributes.fillColor.value = colorFinal;
-                                                if (item.attributes.lineColor) item.attributes.lineColor.value = colorFinal;
-                                                
-                                                seCambioColor = true;
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                            
-                            // Si logramos inyectar los colores, obligamos al reproductor a re-dibujar el lienzo
-                            if (seCambioColor) {
-                                console.log("🟢 ¡Éxito! Colores del mapa sincronizados con Google Sheets.");
-                                if (window.pano && typeof window.pano.getCurrentPanoramaName === "function" && typeof window.pano.setPanorama === "function") {
-                                    let escenaActual = window.pano.getCurrentPanoramaName();
-                                    window.pano.setPanorama(escenaActual); // Refresca el Canvas visualmente
-                                }
-                                clearInterval(verificador3DVista);
-                            }
-                        }
-                    }
-                }
-            } catch (err) {
-                console.log("🔄 Esperando carga completa de componentes gráficos...");
-            }
-            
-            if (intentos > 40) clearInterval(verificador3DVista);
-        }, 500);
+        // Intentar buscar un hotspot directamente mediante la API común
+        if (typeof window.pano.getHotspot === "function") {
+            let hotspotPrueba = window.pano.getHotspot("lote_01");
+            console.log("🎯 Resultado de buscar 'lote_01' vía API:", hotspotPrueba);
+        } else if (typeof window.pano.getItem === "function") {
+            console.log("🎯 Cambiando estrategia a getItem...");
+            let itemPrueba = window.pano.getItem("lote_01");
+            console.log("📦 Objeto obtenido con getItem:", itemPrueba);
+        } else {
+            console.log("⚠️ El reproductor no expone funciones directas tradicionales (getHotspot/getItem).");
+        }
+    } else {
+        console.log("🔴 No se detectó 'window.pano'. El visor podría estar encapsulado en otra variable.");
+    }
 
-    })
-    .catch(error => console.error('Error al descargar inventario:', error));
-}
+    // 2. Verificar el estado actual del Excel para asegurar que no haya bloqueos de red
+    fetch(URL_GOOGLE_SHEETS)
+    .then(r => r.text())
+    .then(data => console.log("🟢 Lectura de Sheets lista. Filas:", data.split("\n").length))
+    .catch(e => console.error("🔴 Error al leer Sheets:", e));
 
-if (document.readyState === "complete" || document.readyState === "interactive") {
-    inicializarControlInventario();
-} else {
-    window.addEventListener("DOMContentLoaded", inicializarControlInventario);
-}
+}, 6000);
 </script>
 </body>
 </html>
