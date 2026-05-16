@@ -32,41 +32,38 @@
     <div id="viewer" class="fill-viewport"></div>
 
 <script>
-console.log("%c=== INICIANDO ESPIONAJE TÉCNICO TRACCO ===", "color: #00ff00; font-weight: bold; font-size: 14px;");
+console.log("%c=== INICIANDO ESCANEO DE ALTA PRECISIÓN ===", "color: #00ffff; font-weight: bold; font-size: 14px;");
 
-const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
-
-// 1. Verificar el enlace de Excel
-fetch(URL_GOOGLE_SHEETS)
-.then(r => r.text())
-.then(data => {
-    console.log("🟢 1. EXCEL CONECTADO. Filas detectadas:", data.split("\n").length);
-})
-.catch(e => console.error("🔴 ERROR CONEXIÓN EXCEL:", e));
-
-// 2. Monitorear las entrañas de 3DVista
-let checadorSistemas = setInterval(() => {
-    if (window.tdvData) {
-        console.log("🟢 2. DETECTADO window.tdvData");
-        if (window.tdvData.panoramas && window.tdvData.panoramas[0]) {
-            let primerPano = window.tdvData.panoramas[0];
-            if (primerPano.hotspots) {
-                console.log("🔥 ¡Hotspots encontrados en la base de datos! Cantidad:", primerPano.hotspots.length);
-                console.log("📐 Estructura interna de tu Hotspot:", JSON.stringify(primerPano.hotspots[0]));
-            } else {
-                console.log("⚠️ El panorama no reporta hotspots internos.");
+function escudriñarMemoria(objeto, rutaActual = "window", visitados = new Set()) {
+    if (!objeto || visitados.has(objeto) || typeof objeto !== "object") return;
+    visitados.add(objeto);
+    
+    for (let propiedad in objeto) {
+        try {
+            let valor = objeto[propiedad];
+            let nuevaRuta = Array.isArray(objeto) ? `${rutaActual}[${propiedad}]` : `${rutaActual}.${propiedad}`;
+            
+            // Si encontramos el ID de tu lote, el sistema nos dirá dónde está metido
+            if (valor === "lote_01") {
+                console.log(`%c🎯 ¡ENCONTRADO! 'lote_01' existe en: ${nuevaRuta}`, "color: #00ff00; font-weight: bold; font-size: 13px;");
+                console.log("📦 Objeto contenedor completo para análisis de color:", objeto);
             }
+            
+            if (typeof valor === "object" && valor !== null) {
+                escudriñarMemoria(valor, nuevaRuta, visitados);
+            }
+        } catch (e) {
+            // Ignorar errores de seguridad del navegador
         }
     }
+}
 
-    if (window.pano) {
-        console.log("🟢 3. DETECTADO window.pano (Visor en vivo activo)");
-        clearInterval(checadorSistemas); // Detener el ciclo si el visor ya arrancó
-    }
-}, 1500);
-
-// Apagar el rastreador tras 15 segundos para proteger la memoria
-setTimeout(() => clearInterval(checadorSistemas), 15000);
+// Esperamos 6 segundos a que el recorrido virtual de 3DVista se monte por completo en pantalla
+setTimeout(() => {
+    console.log("🔎 Buscando la ubicación secreta de tus lotes en la memoria de 3DVista v2024...");
+    escudriñarMemoria(window);
+    console.log("🏁 Escaneo profundo terminado.");
+}, 6000);
 </script>
 </body>
 </html>
