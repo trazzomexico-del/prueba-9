@@ -31,44 +31,119 @@
     <div id="preloadContainer" class="fill-viewport"><div style="z-index: 4; position: absolute; overflow: hidden; left: 0%; top: 50%; width: 100.00%; height: 10.00%" ><div style="text-align:left; color:#000; "><DIV STYLE="text-align:center;font-size:1.6666666666666663vmin;"><SPAN STYLE="display:inline-block; letter-spacing:0vmin; white-space:pre-wrap;color:#777777;font-size:1.67vmin;font-family:Arial, Helvetica, sans-serif;">Loading virtual tour. Please wait...</SPAN></DIV></div></div></div>
     <div id="viewer" class="fill-viewport"></div>
 <script>
-console.log("%c=== PROBANDO API OFICIAL DE RENDERIZADO ===", "color: #ffff00; font-weight: bold; font-size: 14px;");
+console.log("%c=== MOTOR DE INVENTARIO INMERSIA 360 ACTIVADO ===", "color: #00ffff; font-weight: bold; font-size: 14px;");
 
 const URL_GOOGLE_SHEETS = "https://docs.google.com/spreadsheets/d/1Iffh-VbZUFFYpI5sVI8HQAz6IPgACs_W2sq0iEH4iVo/export?format=csv";
 
-// Esperamos 6 segundos a que el mapa esté completamente activo en pantalla
-setTimeout(() => {
-    console.log("🚀 Verificando herramientas de control de 3DVista...");
-
-    // 1. Verificar si el visor expone sus componentes de control
-    if (window.pano) {
-        console.log("🟢 Visor global 'window.pano' detectado.");
-        
-        // Vamos a listar todas las funciones que tiene el visor para ver cuál nos sirve para actualizar elementos
-        let metodosDisponibles = Object.getOwnPropertyNames(window.pano).filter(item => typeof window.pano[item] === 'function');
-        console.log("📋 Funciones disponibles en tu reproductor para alterar el mapa:", metodosDisponibles);
-
-        // Intentar buscar un hotspot directamente mediante la API común
-        if (typeof window.pano.getHotspot === "function") {
-            let hotspotPrueba = window.pano.getHotspot("lote_01");
-            console.log("🎯 Resultado de buscar 'lote_01' vía API:", hotspotPrueba);
-        } else if (typeof window.pano.getItem === "function") {
-            console.log("🎯 Cambiando estrategia a getItem...");
-            let itemPrueba = window.pano.getItem("lote_01");
-            console.log("📦 Objeto obtenido con getItem:", itemPrueba);
-        } else {
-            console.log("⚠️ El reproductor no expone funciones directas tradicionales (getHotspot/getItem).");
-        }
-    } else {
-        console.log("🔴 No se detectó 'window.pano'. El visor podría estar encapsulado en otra variable.");
+// Convierte texto del Excel a formato Hexadecimal nativo de Canvas
+function procesarColorExcel(valorCelda) {
+    let valor = valorCelda.trim().toLowerCase().replace("#", "");
+    
+    // Si ya pusiste un código HEX válido (ej. FF0000 o 00FF00)
+    if (valor.length === 6 && /^[0-9a-f]{6}$/i.test(valor)) {
+        return "#" + valor;
     }
+    
+    // Diccionario inteligente por palabras en español
+    if (valor.includes("vend") || valor.includes("roj")) return "#FF0000";     // Rojo
+    if (valor.includes("disp") || valor.includes("verd")) return "#00FF00";    // Verde (00FF00)
+    if (valor.includes("azul")) return "#0000FF";                             // Azul
+    if (valor.includes("morad") || valor.includes("800080")) return "#800080"; // Morado
+    
+    return "#00FF00"; // Color base si no coincide ninguno
+}
 
-    // 2. Verificar el estado actual del Excel para asegurar que no haya bloqueos de red
+function sincronizarInventarioRealtime() {
     fetch(URL_GOOGLE_SHEETS)
-    .then(r => r.text())
-    .then(data => console.log("🟢 Lectura de Sheets lista. Filas:", data.split("\n").length))
-    .catch(e => console.error("🔴 Error al leer Sheets:", e));
+    .then(response => response.text())
+    .then(csvText => {
+        let filas = csvText.split("\n");
+        let mapeo_lotes = {};
+        
+        // Estructuramos los datos del Google Sheet
+        filas.forEach(fila => {
+            let columnas = fila.split(",");
+            if(columnas.length >= 2) {
+                let nombreLote = columnas[0].trim().toLowerCase().replace(/[\s_-]/g, "");
+                let estadoColor = columnas[1].trim();
+                if (nombreLote) {
+                    mapeo_lotes[nombreLote] = estadoColor;
+                }
+            }
+        });
 
-}, 6000);
+        // Bucle de escaneo e inyección en la memoria profunda descubierta
+        let intentos = 0;
+        let bucleInyeccion = setInterval(() => {
+            intentos++;
+            
+            try {
+                if (window.TDV && window.TDV.qb && window.TDV.qb.F6a && window.TDV.qb.F6a[0]) {
+                    let core = window.TDV.qb.F6a[0];
+                    let items = core.wv.Xl.rd.attributes.definitions.items;
+                    
+                    if (items && items.length > 0) {
+                        let cambiosRealizados = false;
+                        
+                        items.forEach(item => {
+                            if (item.attributes && item.attributes.data && item.attributes.data.value) {
+                                let tagsItems = item.attributes.data.value.tags && item.attributes.data.value.tags.items ? item.attributes.data.value.tags.items : [];
+                                
+                                tagsItems.forEach(tagObj => {
+                                    if (tagObj.value) {
+                                        let idHotspot = tagObj.value.toString().toLowerCase().replace(/[\s_-]/g, "");
+                                        
+                                        // Si el ID del plano coincide con la lista del Excel
+                                        if (mapeo_lotes[idHotspot]) {
+                                            let hexColor = procesarColorExcel(mapeo_lotes[idHotspot]);
+                                            
+                                            // 1. Modificar valores de definición base
+                                            if (item.attributes.value && item.attributes.value.label) {
+                                                item.attributes.value.label.value = hexColor;
+                                            }
+                                            // 2. Modificar canales dinámicos de relleno y línea del Canvas
+                                            if (item.attributes.fillColor) item.attributes.fillColor.value = hexColor;
+                                            if (item.attributes.lineColor) item.attributes.lineColor.value = hexColor;
+                                            
+                                            cambiosRealizados = true;
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        
+                        // Si se cambiaron los colores en memoria, obligamos al Canvas a repintarse por completo
+                        if (cambiosRealizados) {
+                            console.log("🟢 ¡Colores inyectados en la memoria de 3DVista con éxito!");
+                            
+                            // TRUCO DE RENDERIZADO: Forzamos un evento 'resize' global.
+                            // Esto obliga al motor gráfico a recalcular el contenedor y volver a dibujar los polígonos con los nuevos colores en caliente.
+                            window.dispatchEvent(new Event('resize'));
+                            
+                            // Intento secundario de actualización interna de la interfaz
+                            if (core.wv && typeof core.wv.update === "function") core.wv.update();
+                            
+                            clearInterval(bucleInyeccion);
+                        }
+                    }
+                }
+            } catch (err) {
+                // Silencioso mientras terminan de cargar los elementos pesados del tour
+            }
+            
+            if (intentos > 30) clearInterval(bucleInyeccion);
+        }, 1000);
+
+    })
+    .catch(error => console.error('Error al consultar inventario desde Sheets:', error));
+}
+
+// Inicialización segura del script
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    setTimeout(sconizarInventarioRealtime, 2000);
+} else {
+    window.addEventListener("load", () => setTimeout(sconizarInventarioRealtime, 2000));
+}
 </script>
 </body>
 </html>
